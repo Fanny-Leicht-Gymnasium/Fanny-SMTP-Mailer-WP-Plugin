@@ -112,7 +112,13 @@ function fanny_mailer_register_settings()
 		'fanny-mailer-settings',
 		'fanny_mailer_smtp_section'
 	);
-
+	add_settings_field(
+		'fanny_mailer_smtp_debug',
+		'SMTP DebugLevel',
+		'fanny_mailer_smtp_debug_callback',
+		'fanny-mailer-settings',
+		'fanny_mailer_smtp_section'
+	);
 
 	// Register SMTP settings
 	register_setting(
@@ -147,6 +153,16 @@ function fanny_mailer_register_settings()
 		'fanny_mailer_settings_group',
 		'fanny_mailer_smtp_autotls'
 	);
+    register_setting(
+        'fanny_mailer_settings_group',
+        'fanny_mailer_smtp_debug',
+        array(
+            'type' => 'integer',
+            'sanitize_callback' => 'absint',
+            'default' => 0
+        )
+    );
+    
 	// Register more settings as needed
 }
 
@@ -204,6 +220,16 @@ function fanny_mailer_smtp_autotls_callback()
 		echo '<input type="checkbox" name="fanny_mailer_smtp_autotls" />';
 	}
 }
+function fanny_mailer_smtp_debug_callback() {
+    $smtp_debug = get_option('fanny_mailer_smtp_debug');
+    ?>
+    <label><input type="radio" name="fanny_mailer_smtp_debug" value="0" <?php checked($smtp_debug, 0); ?>> None</label><br>
+    <label><input type="radio" name="fanny_mailer_smtp_debug" value="1" <?php checked($smtp_debug, 1); ?>> Basic</label><br>
+    <label><input type="radio" name="fanny_mailer_smtp_debug" value="2" <?php checked($smtp_debug, 2); ?>> Detailed</label><br>
+    <label><input type="radio" name="fanny_mailer_smtp_debug" value="3" <?php checked($smtp_debug, 3); ?>> Full</label><br>
+	<label><input type="radio" name="fanny_mailer_smtp_debug" value="4" <?php checked($smtp_debug, 4); ?>> Only Errors</label><br>
+	<?php
+}
 
 // SMTP Init Settings
 add_action('phpmailer_init', 'mail_smtp');
@@ -221,22 +247,34 @@ function mail_smtp($phpmailer)
 	$phpmailer->SMTPSecure = get_option('fanny_mailer_smtp_secure');
 	$phpmailer->SMTPAutoTLS = get_option('fanny_mailer_smtp_autotls') ? true : false;
 
-	// Filter out client message body and output debug info to the logs
-	// NOTE: Log level must be set to '2' or higher in order for the filter to work
-	$phpmailer->SMTPDebug = 2;
-
-	$phpmailer->Debugoutput = function ($str) {
-		static $logging = true;
-		if ($logging === false && strpos($str, 'SERVER -> CLIENT') !== false) {
-			$logging = true;
-		}
-		if ($logging) {
-			error_log("SMTP " . "$str");
-		}
-		if (strpos($str, 'SERVER -> CLIENT: 354') !== false) {
-			$logging = false;
-		}
-	};
+	if (get_option('fanny_mailer_smtp_debug') == 4){
+		$phpmailer->SMTPDebug = 2; // Set debug level to 2 for error messages
+		
+		$phpmailer->Debugoutput = function ($str) {
+			// Check if the debug output contains an error message
+			if (strpos($str, 'Error:') !== false) {
+				// Log only when an error is encountered
+				error_log("SMTP Error: $str");
+			}
+		};
+	}else{
+		// Filter out client message body and output debug info to the logs
+		// NOTE: Log level must be set to '2' or higher in order for the filter to work
+		$phpmailer->SMTPDebug = get_option('fanny_mailer_smtp_debug');
+		$phpmailer->Debugoutput = function ($str) {
+			static $logging = true;
+			if ($logging === false && strpos($str, 'SERVER -> CLIENT') !== false) {
+				$logging = true;
+			}
+			if ($logging) {
+				error_log("SMTP " . "$str");
+			}
+			if (strpos($str, 'SERVER -> CLIENT: 354') !== false) {
+				$logging = false;
+			}
+		};
+	}
+	
 }
 // Prevent Wordpress from overriding the SMTP FROM address (Office 365 compatibility)
 add_filter('wp_mail_from', function ($email) {

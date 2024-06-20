@@ -278,5 +278,5 @@ function mail_smtp($phpmailer)
 }
 // Prevent Wordpress from overriding the SMTP FROM address (Office 365 compatibility)
 add_filter('wp_mail_from', function ($email) {
-	return $_ENV["SMTP_FROM"];
+	return get_option('fanny_mailer_smtp_from');
 });
